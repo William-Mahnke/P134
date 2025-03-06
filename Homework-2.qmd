@@ -1,0 +1,310 @@
+---
+title: "Homework 2"
+author: "PSTAT 134/234"
+format: html
+editor: visual
+---
+
+## Homework 2
+
+### Part One: Analyzing the Weather
+
+In this section, you will gain more practice working with public APIs, this time using a public weather API, [WeatherAPI](https://www.weatherapi.com/). The first thing you'll need to access the API is an API key. You can sign up for a key here: <https://www.weatherapi.com/signup.aspx>
+
+Collaborators: Anthony Cu
+
+```{r}
+library(tidyverse)
+library(httr)
+library(xml2)
+library(rvest)
+```
+
+#### Exercise 1
+
+Use the <http://api.weatherapi.com/v1/current.json> URL to access the API and obtain real-time weather data. Note that you will want to specify three query parameters, at least – `key`, which should be set to your individual API key, `q`, which should equal the city name of a specified location – for example `q = "Isla Vista"` – and `aqi`, which indicates whether you want to obtain air quality data (`"yes"` or `"no"`).
+
+Obtain current real-time weather data for **fifty randomly-selected cities**. I have saved a data file containing the names of fifty cities to `/data/cities.csv`. This ensures that you are all working with the same locations (although your results will still differ, depending on when you obtain the data).
+
+```{r}
+# Exercise 1
+# load in cities csv for 
+cities <- read_csv("~/pstat-134-234/Homework/Homework 2/data/cities.csv")
+
+# accessing the API
+# key - aca3e17570e84ef592b235541242610
+
+# function based off lecture code to get current weather
+get_current_weather <- function(city) {
+  # encode city for URL since some city names are more than one word
+  city <- URLencode(city)
+  
+  # didn't include my api in the function parameters
+  url <- paste0("http://api.weatherapi.com/v1/current.json?key=", 'aca3e17570e84ef592b235541242610',"&q=", city, "&aqi=yes")
+  
+  # Send a GET request to the API
+  response <- GET(url)
+  
+  # Check if the response was successful
+  if (status_code(response) == 200) {
+    # Parse and return the JSON data if the request was successful
+    content(response, "parsed")
+  } else {
+    # Return NULL if there was an error
+    NULL
+  }
+}
+
+# create a list to store current weather data for 50 random cities
+weather_data_list <- list()
+for (city in cities$names){
+  weather_data <- get_current_weather(city)
+  weather_data_list[[city]] <- weather_data
+}
+```
+
+#### Exercise 2
+
+Write code in R or Python (your choice) to extract and store the following data for each location:
+
+-   City name
+
+-   Country
+
+-   Whether or not it is currently daytime there
+
+-   Temperature (in Fahrenheit)
+
+-   Humidity
+
+-   Weather description (`condition` text; for example, "Mist", "Clear", etc.)
+
+-   Wind speed (in miles per hour)
+
+-   Precipitation (in millimeters)
+
+-   US EPA air quality index (ranges from $1$ to $6$, representing the 6 categories of air quality: <https://www.airnow.gov/aqi/aqi-basics/>)
+
+```{r}
+# Exercise 2
+# create empty tibble for data
+weather_data_table <- tibble(`City Name` = character(50),
+                             `Country` = character(50),
+                             `Daytime` = numeric(50),
+                             `Temperature` = numeric(50),
+                             `Humidity` = numeric(50),
+                             `Weather` = character(50),
+                             `Wind Speed` = numeric(50),
+                             `Precipitation` = numeric(50),
+                             `AQI` = numeric(50))
+
+# adding cities 
+weather_data_table$`City Name` <- cities$names
+
+# adding country 
+weather_data_table$Country <- map_chr(weather_data_list,~.x$location$country)
+
+# adding daytime - continuing to encode in 0s and 1s 
+weather_data_table$Daytime <- map_int(weather_data_list, ~.x$current$is_day)
+
+# adding temperature 
+weather_data_table$Temperature <- map_dbl(weather_data_list, ~.x$current$temp_f)
+
+# adding humidity
+weather_data_table$Humidity <- map_dbl(weather_data_list, ~.x$current$humidity)
+
+# adding weather
+weather_data_table$Weather <- map_chr(weather_data_list, ~.x$current$condition$text)
+
+# adding wind speed
+weather_data_table$`Wind Speed` <- map_dbl(weather_data_list, ~.x$current$wind_mph)
+
+# adding precipitation
+weather_data_table$Precipitation <- map_dbl(weather_data_list, ~.x$current$precip_mm)
+
+# adding AQI
+weather_data_table$AQI <- map_dbl(weather_data_list, ~.x$current$air_quality$`us-epa-index`)
+```
+
+#### Exercise 3
+
+Create a scatterplot of temperature vs. humidity. Add a linear regression line to the plot. What are the estimated intercept and slope values for this linear regression? Does there appear to be a significant relationship between temperature and humidity?
+
+```{r}
+# Exercise 3
+ggplot(weather_data_table, aes(x = Temperature, y = Humidity)) + 
+  geom_point() + 
+  geom_smooth(formula = y ~ x, method = 'lm', se = F)
+```
+
+Looking at the scatterplot with the fit linear regression line, there doesn't appear to be a significant relationship between temperature and humidity.
+
+#### Exercise 4
+
+Create a bar chart of the EPA air quality index values. What does the distribution of air quality look like? Identify the location(s) with the best air quality and the worst air quality.
+
+```{r}
+# Exercise 4 - distribution of AQI
+ggplot(weather_data_table, aes(x = AQI)) + geom_histogram(bins = 6) 
+```
+
+Looking at the distribution of the AQI, it appears most city's AQI is between one and three with a small group of cities having an AQI between four and six. 
+
+```{r}
+# Exercise 4 - sorting cities by AQI
+weather_data_table[order(weather_data_table$AQI, decreasing = T),] %>%
+  select(`City Name`,`AQI`) 
+```
+
+The cities with the best air quality index are Riyadh (6) and Tangshan (5) [there are a few cities with 4s so I didn't list them all]. The cities with the worst AQI, all having a 1, are Casablanca, Fez, Algiers, Toronto, Porto Alegre, Havana, Changchun, Auckland, Quito, and Guatemala City. 
+
+#### Exercise 5
+
+Create a bar chart of the current weather description. Which conditions are the most common? Which are the least?
+
+```{r}
+# Exercise 5
+table(weather_data_table$Weather)
+
+# looking at the table, there's a count for "Partly cloudy" and "Partly Cloudy". To avoid duplicate columns, I'll change the weather condition data in the table to all lowercase letters
+
+weather_data_table$Weather <- tolower(weather_data_table$Weather)
+table(weather_data_table$Weather)
+
+# with the new table, we can make a barplot to compare appearance of conditions
+counts <- table(weather_data_table$Weather)
+barplot(counts, main = "Weather Conditions Distribution", las = 2, cex.names = 1)
+```
+
+The most common conditions are clear, partly cloudy, and sunny, while the least common conditions are cloudy, fog, light rain shower, mist, moderate or heavy rain in area with thunder, overcast, and patchy light drizzle.
+
+#### Exercises for 234 Students
+
+##### Exercise 6
+
+Do you think day vs. night cycles cause a significant difference in temperature? Test this hypothesis using a *t*-test.
+
+##### Exercise 7
+
+Create a table of the average temperature, humidity, wind speed, and precipitation broken down by weather description.
+
+##### Exercise 8
+
+Learn how to use the forecast API (<http://api.weatherapi.com/v1/forecast.json>).
+
+Determine the chance of rain (in percentage) for Goleta, California tomorrow. *(Note that "tomorrow" may vary depending on when you do this assignment; that is fine.)*
+
+Based on the percentage you obtained, do you think it will rain in Goleta tomorrow?
+
+### Part Two: Scraping Books
+
+In this section, you'll practice your web scraping skills by experimenting with a fictional online bookstore located at <https://books.toscrape.com/>. Use the tools that we demonstrate in class to do the following, in either R or Python (your choice):
+
+#### Exercise 9
+
+Scrape the first 20 results from this site. Create a data frame (or tibble) that stores the following for each book:
+
+-   Title
+
+-   Price (excluding tax)
+
+-   Star rating
+
+-   Whether the book is in stock
+
+```{r}
+html <- read_html("https://books.toscrape.com/")
+```
+
+```{r}
+# Exercise 9
+ordered_list <- html %>%
+  html_elements("ol") %>%
+  html_elements("li")
+
+# pulling book titles from ordered_list
+book_titles <- ordered_list %>%
+  html_elements("article") %>%
+  html_elements("div") %>%
+  html_elements("a") %>%
+  html_elements("img") %>%
+  html_attr("alt")
+
+# pulling price (excluding tax) from ordered_list
+book_prices <- ordered_list %>%
+  html_elements("article") %>%
+  html_nodes(".price_color") %>%
+  html_text2() %>%
+  str_replace("£","")
+
+# pulling rating from ordered_list
+book_ratings <- ordered_list %>%
+  html_elements("article") %>%
+  html_nodes(".star-rating") %>%
+  html_attr("class") %>%
+  str_replace("star-rating ","")
+
+# pulling whether in stock from ordered_list
+book_stock <- ordered_list %>%
+  html_elements("article") %>%
+  html_nodes(".instock.availability") %>%
+  html_text2()
+
+books <- tibble(`Title` = book_titles,
+                `Price` = book_prices,
+                `Rating` = book_ratings,
+                `In Stock` = book_stock)
+```
+
+#### Exercise 10
+
+Create a histogram of prices for these 20 books. What is the average price?
+
+```{r}
+# Exercise 10
+books$Price <- as.double(books$Price)
+
+mean(books$Price)
+ggplot(books, aes(x = Price)) + geom_histogram(bins = 20)
+```
+
+The average book price is about $38.05
+
+#### Exercise 11
+
+Create a bar chart of star rating for these 20 books. Find the book(s) with the highest and lowest star ratings.
+
+```{r}
+# change Rating to numeric variable
+books$Rating <- case_when(books$Rating == "One" ~ 1,
+                          books$Rating == "Two" ~ 2,
+                          books$Rating == "Three" ~ 3,
+                          books$Rating == "Four" ~ 4,
+                          books$Rating == "Five" ~ 5,
+                          .default = NA)
+
+count <- table(books$Rating)
+barplot(count)
+```
+
+```{r}
+weather_data_table[order(weather_data_table$AQI, decreasing = T),] %>%
+  select(`City Name`,`AQI`) 
+
+books[order(books$Rating, decreasing = T),] %>%
+  select(`Title`,`Rating`)
+```
+
+The books with the highest rating (a five) are Sapiens: A Brief History of Humankind, Set Me Free, Scott Pilgrim's Precious Little Life, Rip it Up and Start Again. The books with the lowest rating (a one) are Tipping the Velvet, Soumission, The Requiem Red, The Black Maria	, Olio, Mesaerion: The Best Science Fiction Stories 1800-1849.
+
+#### Exercises for 234 Students
+
+##### Exercise 12
+
+Extend your skills; instead of scraping only the first 20 books, scrape the first **two hundred books**.
+
+For each book, in addition to the information we stored previously (title, price, star rating, etc.), figure out how to extract the **category** (i.e., Travel, Mystery, Classics, etc.).
+
+##### Exercise 13
+
+What is the most common category? What is the least common?

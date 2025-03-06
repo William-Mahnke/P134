@@ -1,0 +1,388 @@
+---
+title: "Homework 4"
+author: "PSTAT 134/234"
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-depth: 4
+    embed-resources: true
+    theme: simplex
+editor: visual
+---
+
+## Homework 4
+
+**Note: If this is one of your two late homework submissions, please indicate below; also indicate whether it is your first or second late submission.**
+
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+This homework assignment has you practice working with some text data, doing some natural language processing. I strongly advise using Lab 7 for assistance.
+
+You also may need to use other functions. I encourage you to make use of our textbook(s) and use the Internet to help you solve these problems. You can also work together with your classmates. If you do work together, you should provide the names of those classmates below.
+
+[Names of Collaborators (if any):] Anthony Cu{.underline}
+
+### Natural Language Processing
+
+We'll work with the data in `data/spotify-review-data.csv`. This CSV file contains a total of 51,473 rows, each representing a unique user review for the Spotify application. The dataset has two columns:
+
+-   Review: This column contains the text of user reviews, reflecting their experiences, opinions, and feedback on the Spotify app.
+
+-   Sentiment label: This column categorizes each review as either "POSITIVE" or "NEGATIVE" based on its sentiment.
+
+The data comes from this source at Kaggle: <https://www.kaggle.com/datasets/alexandrakim2201/spotify-dataset>
+
+```{r, results = 'hide'}
+# loading packages
+library(tidyverse)
+library(tidymodels) 
+library(reshape2)
+
+library(tidytext) 
+library(stringi)
+
+library(wordcloud)
+library(ggraph)
+library(igraph) 
+library(ggplot2)
+library(kableExtra)
+library(stopwords)
+library(yardstick)
+library(kernlab)
+```
+
+#### Exercise 1
+
+Read the data into R (or Python, whichever you prefer).
+
+Take a look at the distribution of `label`. Are there relatively even numbers of negative and positive reviews in the data set?
+
+```{r, results = 'hide'}
+# loading data
+spotify_review_data <- read_csv("~/Desktop/P134/spotify-review-data.csv")
+```
+
+```{r}
+# distribution of reviews
+table(spotify_review_data$label)
+```
+
+The distribution of reviews is approximately 55% negative and 45% positive. It is obviously not exactly even, but the distribution is still reasonably close to even.
+
+#### Exercise 2
+
+Take a random sample of $10,000$ reviews, stratified by `label`. All further exercises will be working with this smaller sample of reviews.
+
+```{r}
+# sampling reviews on label
+set.seed(17)
+# proportion in split ensures 10000 observations for training (sample) set
+split <- initial_split(spotify_review_data, prop = .18975, strata = label)
+sample <- training(split)
+remove(split)
+```
+
+#### Exercise 3
+
+Clean the reviews. Remove punctuation and convert the letters to lowercase.
+
+Tokenize the reviews into words.
+
+Remove stop words. (You can use any pre-made list of stop words of your choice.)
+
+Verify that this process worked correctly.
+
+```{r}
+sample$id <- seq.int(nrow(sample))
+sample$Review <- sample$Review %>% 
+  iconv(from = 'UTF-8', to = 'ASCII//TRANSLIT') %>% 
+  stri_replace_all_regex("[^\\p{L}\\p{N}\\s]", "") %>%
+  tolower()
+```
+
+```{r}
+# cleaning reviews - code used from Lab 7
+remove <- c('\n','[[:punct:]]','nbsp','[[:digit:]]','[[:symbol:]]','^br$','href','ilink') %>%
+  paste(collapse = '|')
+
+sample$Review <- sample$Review %>% 
+  str_remove_all('\'') %>%
+  str_replace_all(remove, ' ') %>%
+  str_replace_all("([a-z])([A-Z])", "\\1 \\2") %>%
+  tolower() %>%
+  str_replace_all("\\s+", " ")
+  
+# tokenizing and removing stop words
+data("stop_words")
+
+sample_tokens <- sample %>%
+  unnest_tokens(word, Review) %>%
+  anti_join(stop_words) %>%
+  na.omit()
+
+sample_tokens %>%
+  count(word, sort = T) %>%
+  head(15)
+```
+
+#### Exercise 4
+
+Create a bar chart of the most commonly-occurring words (not including stop words).
+
+```{r}
+# bar chart of most popular words overall
+sample_tokens %>%
+  select(-label) %>%
+  count(word, sort = T) %>%
+  slice_max(n, n = 20) %>%
+  ggplot(aes(x = n, y = reorder(word, n))) +
+  geom_bar(stat = 'identity') +
+  labs(title = 'Most Common Words in Reviews',
+       y = NULL, x = 'Appearances')
+```
+
+Create bar charts of the most commonly-occurring words, broken down by `label`. What words are more common in positive reviews? What words are more common in negative reviews?
+
+```{r}
+# top words in positive reviews
+reordered_pos_tokens <- sample_tokens %>%
+  filter(label == 'POSITIVE') %>%
+  select(-label) %>%
+  count(word, sort = T) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+ggplot(reordered_pos_tokens,aes(x = n, y = reorder(word, n))) +
+  geom_bar(stat = 'identity') +
+  labs(title = 'Most Popular Words in Positive Reviews',
+       y = NULL, x = 'Appearances')
+
+# top words in negative reviews 
+reordered_neg_tokens <- sample_tokens %>%
+  filter(label == 'NEGATIVE') %>%
+  select(-label) %>%
+  count(word, sort = T) %>%
+  arrange(desc(n)) %>%
+  head(20)
+
+ggplot(reordered_neg_tokens,aes(x = n, y = reorder(word, n))) +
+  geom_bar(stat = 'identity') +
+  labs(title = 'Most Popular Words in Negative Reviews',
+       y = NULL, x = 'Appearances')
+```
+
+The most common words in positive reviews were music, app, spotify, love, and songs while the most common words in negative reviews were appm, music, songs, song, and spotify.
+
+#### Exercise 5
+
+Create a word cloud of the most commonly-occurring words overall, broken down by "positive" or "negative" sentiment (using the Bing sentiment lexicon).
+
+```{r}
+sample_tokens %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = T) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("red","limegreen"),
+                   max.words = 100)
+```
+
+#### Exercise 6
+
+Calculate the tf-idf values for the words in the dataset.
+
+```{r}
+# finding tf-idf values for words
+sample_tf_idf <- sample_tokens %>%
+  count(label, id, word) %>%
+  bind_tf_idf(term = word,
+              document = id,
+              n = n)
+
+head(sample_tf_idf, n = 10)
+```
+
+Find the 30 words with the largest tf-idf values.
+
+```{r}
+sample_tf_idf %>%
+  arrange(desc(tf_idf)) %>%
+  head(n = 30)
+```
+
+Find the 30 words with the smallest tf-idf values.
+
+```{r}
+sample_tf_idf %>%
+  mutate(temp = 1 / tf_idf) %>%
+  arrange(desc(temp)) %>%
+  select(-temp) %>%
+  head(n = 30)
+```
+
+#### Exercise 7
+
+Find the 30 most commonly occuring bigrams.
+
+Create graphs visualizing the networks of bigrams, broken down by `label`. That is, make one graph of the network of bigrams for the positive reviews, and one graph of the network for the negative reviews.
+
+What patterns do you notice?
+
+```{r}
+# getting the bigrams for the text
+sample_bigrams <- sample %>%
+  unnest_tokens(bigram, Review, token = 'ngrams', n = 2) %>%
+  separate(bigram, c("word1","word2"), sep = ' ') %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  na.omit() %>%
+  unite(bigram, word1, word2, sep = " ") 
+
+a <- grid::arrow(type = 'closed', length = unit(.095, 'inches'))
+
+sample_bigrams %>%
+  count(bigram, sort = T) %>%
+  head(20)
+```
+
+```{r}
+# create separate bigrams for igraphs
+positive_bigrams_sep <- sample_bigrams %>%
+  filter(label == "POSITIVE") %>%
+  separate(bigram, c("word1","word2"), sep = ' ') %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+positive_bigram_graph <- positive_bigrams_sep %>%
+  count(word1, word2) %>% filter(n > 10) %>%
+  graph_from_data_frame()
+```
+
+```{r}
+# positive bigram graph
+ggraph(positive_bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = F,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = 'limegreen', size = 4) +
+  geom_node_text(aes(label = name), vjust = 0.75, hjust = 0.75) +
+  labs(title = "Positive Bigram Graph")
+```
+
+For the positive reviews, there appears to be some pairs on the outskirts of the network, namely "joe" and "rogan", "wide" and "variety", "recommend" and "highly", and "user" and "friendly." In the middle contains a larger component where "music" is at the center. The network also does show words connected to "free" and "premium" showing similarities between the experiences. Within the cluster we can see a couple of common paths between words, such as music going to app and love going to spotify.
+
+```{r}
+# create separate bigrams for igraphs
+negative_bigrams_sep <- sample_bigrams %>%
+  filter(label == "NEGATIVE") %>%
+  separate(bigram, c("word1","word2"), sep = ' ') %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+negative_bigram_graph <- negative_bigrams_sep %>%
+  count(word1, word2) %>% filter(n > 20) %>%
+  graph_from_data_frame()
+```
+
+```{r}
+ggraph(negative_bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = F,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = 'red', size = 4) +
+  geom_node_text(aes(label = name), vjust = 0.75, hjust = 0.75) +
+  labs(title = "Negative Bigram Graph")
+```
+
+Just like the positive network, there are pairs on the outskirts including "offline" and "mode", "internet" and "connection", and "joe" and "rogan". The interior network is more complex than the positive network having multiple important nodes. The most connected nodes appear to be "music", "play", "songs", and "playing".
+
+The similarities of the networks suggest, combined with the visuals from Exercise 3 suggest that positive and negative reviews experience a lot of overlap with respect to words about the overall Spotify experience. Users that are and aren't fans of the platform have different opinions of the same features and even listen to some of the same people (granted Joe Rogan is the most popular podcast on the platform).
+
+With the major cluster again we see paths between words that stand out like the positive graph, such as play going to music and stops going to playing.
+
+#### Exercise 8
+
+Using the tokenized **words** and their corresponding tf-idf scores, fit a **linear support vector machine** to predict whether a given review is positive or negative.
+
+-   Split the data using stratified sampling, with 70% training and 30% testing;
+
+```{r}
+# processing and splitting data 
+sample_tokens <- sample_tf_idf %>%
+  rename(review_label = label,
+         review_id = id) %>%
+  group_by(review_id, review_label, word) %>%
+  summarise(tf_idf = sum(tf_idf), .groups = 'drop') %>%
+  pivot_wider(names_from = word,
+              values_from = tf_idf,
+              values_fill = 0) %>%
+  mutate(review_label = factor(review_label)) %>%
+  select(-review_id)
+
+sample_tokens_split <- initial_split(sample_tokens, prop = 0.7)
+sample_train <- training(sample_tokens_split)
+sample_test <- testing(sample_tokens_split)
+```
+
+-   Drop any columns with zero variance;
+
+```{r}
+# making recipe, dropping columns with 0 variance
+sample_recipe <- recipe(review_label ~ ., data = sample_train) %>%
+  step_zv(all_predictors())
+```
+
+-   Fit a linear support vector machine using default values for any hyperparameters;
+
+```{r, eval = F}
+prep(sample_recipe) %>%
+  bake(sample_train) %>%
+  select(review_label, everything()) %>%
+  summary()
+
+svm <- svm_linear(mode = 'classification', cost = 1, margin = 0.1) %>%
+  set_engine("kernlab")
+
+svm_wflow <- workflow() %>%
+  add_model(svm) %>%
+  add_recipe(sample_recipe)
+
+svm_fit <- svm_wflow %>%
+  fit(data = sample_train)
+
+svm_pred <- predict(svm_fit, new_data = sample_test)
+
+# saving to files
+save(svm_fit, file = "~/Desktop/P134/hw4_files/svm_fit.RData")
+save(svm_pred, file = "~/Desktop/P134/hw4_files/svm_pred.RData")
+save(sample_train, file = "~/Desktop/P134/hw4_files/sample_train.RData")
+save(sample_test, file = "~/Desktop/P134/hw4_files/sample_test.RData")
+```
+
+-   Calculate the model **accuracy** on your testing data.
+
+```{r}
+# load svm_pred and sample_test
+load("~/Desktop/P134/hw4_files/sample_test.RData")
+load("~/Desktop/P134/hw4_files/svm_pred.RData")
+
+svm_res <- bind_cols(sample_test %>% select(review_label), svm_pred)
+
+accuracy(svm_res, truth = review_label, estimate = .pred_class)
+```
+
+#### For 234 Students
+
+#### Exercise 9
+
+Using **either** Bag of Words or Word2Vec, extract a matrix of features. (Note: You can reduce the size of the dataset even further by working with a sample of $3,000$ reviews if need be.)
+
+#### Exercise 10
+
+Fit and tune a **logistic regression model, using lasso regularization**. Follow the same procedure as before, with a few changes:
+
+-   Stratified sampling, with a 70/30 split;
+
+-   Drop any columns with zero variance;
+
+-   Tune `penalty`, using the default values;
+
+-   Calculate your best model's **accuracy** on the testing data.
