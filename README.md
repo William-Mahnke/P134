@@ -10,3 +10,4 @@ File Descriptions:
 * homework-5.ipynb: notebook used for completing the fifth homework assignment which involved image classification. the files for the photos used in the image classification are too large to include in the github repo
 * report.ipynb: final notebook from group project
 * Project_Report.pdf: associated pdf file for report.ipynb
+* data: contains multiple csv files for the data used in assignments and labs
