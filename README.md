@@ -1,13 +1,8 @@
-# P134
-Collection of files created while I took PSTAT134: Statistical Data Science
+This repository contains my work from PSTAT134: Statistical Data Science. Files in this repo include homework and lab assignments covering a wide variety of topics including image classification and natural language processing. This repo also contains the final notebook and report from my group project, building a recommender system for restaurants in the Isla Vista/Goleta/Santa Barbara area. 
 
 File Descriptions:
-* Lab1.ipynb - Lab6.ipynb: notebooks used for lab activities in class. topics for the labs will vary
-* lab-1.qmd: quarto file for the first lab assignment
-* Homework-1.qmd - Homework-4.qmd: Quarto files used for completing homework assignments. topics for each homework will vary
-  * note: Homework-4.qmd has related files in hw4_files
-* HW1.ipynb: started using a notebook for doing the first homework assignemnt before switching to Homework-1.qmd
-* homework-5.ipynb: notebook used for completing the fifth homework assignment which involved image classification. the files for the photos used in the image classification are too large to include in the github repo
-* report.ipynb: final notebook from group project
-* Project_Report.pdf: associated pdf file for report.ipynb
-* data: contains multiple csv files for the data used in assignments and labs
+* Homework: contains homework assignments with code in both R and Python. Homework assignments three and four required other files to finish. Homework 5 contains work on image classification. Due to the number of images we were working with, it wasn't possible to upload them to the repository.
+* Labs: contains lab assignments/tutorials with code in both R and Python
+* Data: contains csv files of data used in homework assignments, labs, and the data used for the final project
+* report.ipynb: comprehensive file of our work during the group project
+* Project_Report.pdf: final report for the group project
